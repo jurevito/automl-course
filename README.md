@@ -1,2 +1,2 @@
-# automl-course
-Repository for Automated Machine Learning project.
+# Automated Machine Learning Course
+Repository for Automated Machine Learning projects.
