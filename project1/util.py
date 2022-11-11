@@ -4,7 +4,8 @@ import pandas as pd
 import seaborn as sn
 from sklearn import preprocessing
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, KFold
+from sklearn.preprocessing import StandardScaler
 
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -18,43 +19,60 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
 classifiers = {
-    'KNN'                : KNeighborsClassifier(3),
+    'KNN'                : KNeighborsClassifier(),
     'Linear SVM'         : SVC(kernel="linear", C=0.025),
     'RBF SVM'            : SVC(gamma=2, C=1),
     'Gaussian Process'   : GaussianProcessClassifier(1.0 * RBF(1.0)),
     'Decision Tree'      : DecisionTreeClassifier(max_depth=5),
-    'Random Forest'      : RandomForestClassifier(max_depth=5, n_estimators=10, max_features=1),
+    'Random Forest'      : RandomForestClassifier(max_depth=5),
     'Neural Network'     : MLPClassifier(alpha=1, max_iter=1000),
     'AdaBoost'           : AdaBoostClassifier(),
     'Naive Bayes'        : GaussianNB(),
     'QDA'                : QuadraticDiscriminantAnalysis(),
-    'Logistic Regression': LogisticRegression(),
+    'Logistic Regression': LogisticRegression(max_iter=500),
 }
 
+category_columns = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope']
 
-def find_baseline(df):
-    df.dropna(subset=['HeartDisease'], inplace=True)
-
-    X = df.drop('HeartDisease', axis=1)
-    y = df.HeartDisease
+def preprocess(df: pd.DataFrame):
 
     le = preprocessing.LabelEncoder()
+    for column in category_columns:
+        df[column] = le.fit_transform(df[column])
 
-    for column in ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope']:
-        X[column] = le.fit_transform(X[column])
+    return df
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33, random_state=2021)
+def find_baseline(df: pd.DataFrame) -> dict[str, float]:
 
-    accuracies = {}
-    print(X_train.head())
+    X = df.drop('HeartDisease', axis=1).values
+    y = df['HeartDisease'].values
 
-    for classifier in classifiers.values():
-        model = classifier.fit(X=X_train, y=y_train)
-        predictions = model.predict(X_test)
-        accuracies[model] = accuracy_score(y_test, predictions)
+    scaler = StandardScaler()
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    results = {}
 
-    print(accuracies)
+    for name,  classifier in classifiers.items():
+        scores = []
+
+        for train_index, test_index in kf.split(X):
+            X_train, X_test = X[train_index], X[test_index]
+            y_train, y_test = y[train_index], y[test_index]
+
+            scaler.fit_transform(X_train)
+            scaler.transform(X_test)
+
+            model = classifier.fit(X=X_train, y=y_train)
+            y_pred = model.predict(X_test)
+
+            score = accuracy_score(y_test, y_pred)
+            scores.append(score)
+
+        results[name] = sum(scores) / len(scores)
+
+    return results
 
 
 if __name__ == '__main__':
-    find_baseline(pd.read_csv("./data/heart_failure.csv"))
+    df = pd.read_csv("./heart_failure.csv")
+    df = preprocess(df)
+    find_baseline(df)
