@@ -44,32 +44,27 @@ def preprocess(df: pd.DataFrame):
 
     return df
 
-def find_baseline(df: pd.DataFrame) -> dict[str, float]:
+def find_baseline(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dict[str, float]:
 
-    X = df.drop('HeartDisease', axis=1).values
-    y = df['HeartDisease'].values
+    X_train = train_df.drop('HeartDisease', axis=1).values
+    X_test = test_df.drop('HeartDisease', axis=1).values
+
+    y_train = train_df['HeartDisease'].values
+    y_test = test_df['HeartDisease'].values
 
     scaler = StandardScaler()
-    kf = KFold(n_splits=5, shuffle=True, random_state=42)
     results = {}
 
     for name,  model in classifiers.items():
-        scores = []
+        
+        scaler.fit_transform(X_train)
+        scaler.transform(X_test)
 
-        for train_index, test_index in kf.split(X):
-            X_train, X_test = X[train_index], X[test_index]
-            y_train, y_test = y[train_index], y[test_index]
+        model.fit(X=X_train, y=y_train)
+        y_pred = model.predict(X_test)
 
-            scaler.fit_transform(X_train)
-            scaler.transform(X_test)
-
-            model.fit(X=X_train, y=y_train)
-            y_pred = model.predict(X_test)
-
-            score = accuracy_score(y_test, y_pred)
-            scores.append(score)
-
-        results[name] = sum(scores) / len(scores)
+        score = accuracy_score(y_test, y_pred)
+        results[name] = score
 
     return results
 
