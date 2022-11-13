@@ -3,7 +3,7 @@ import scipy as scp
 import pandas as pd
 import seaborn as sn
 from matplotlib import pyplot
-from hyperopt import fmin, hp, tpe, STATUS_OK
+from hyperopt import fmin, space_eval, hp, tpe, STATUS_OK
 
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -20,10 +20,9 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
-classifiers = {
+models = {
     'KNN'                : KNeighborsClassifier(),
-    'Linear SVM'         : SVC(kernel="linear", C=0.025),
-    'RBF SVM'            : SVC(gamma=2, C=1),
+    'SVM'         : SVC(kernel="linear", C=0.025),
     'Gaussian Process'   : GaussianProcessClassifier(1.0 * RBF(1.0)),
     'Decision Tree'      : DecisionTreeClassifier(max_depth=5),
     'Random Forest'      : RandomForestClassifier(max_depth=5),
@@ -32,6 +31,31 @@ classifiers = {
     'Naive Bayes'        : GaussianNB(),
     'QDA'                : QuadraticDiscriminantAnalysis(),
     'Logistic Regression': LogisticRegression(max_iter=500),
+}
+
+classifiers = {
+    'KNN'                : KNeighborsClassifier,
+    'SVM'                : SVC,
+    'Gaussian Process'   : GaussianProcessClassifier,
+    'Decision Tree'      : DecisionTreeClassifier,
+    'Random Forest'      : RandomForestClassifier,
+    'Neural Network'     : MLPClassifier,
+    'AdaBoost'           : AdaBoostClassifier,
+    'Naive Bayes'        : GaussianNB,
+    'QDA'                : QuadraticDiscriminantAnalysis,
+    'Logistic Regression': LogisticRegression,
+}
+
+search_spaces = {
+    'Random Forest': {
+        'n_estimators': hp.randint('n_estimators', 50, 150),
+        'criterion': hp.choice('criterion', ['gini', 'entropy', 'log_loss']),
+        'max_depth': hp.randint('max_depth', 10, 200),
+        'min_samples_split': hp.randint('min_samples_split', 2, 3),
+        'min_samples_leaf': hp.randint('min_samples_leaf', 1, 2),
+        'min_weight_fraction_leaf': hp.uniform('min_weight_fraction_leaf', 0, 0.05),
+        'max_features': hp.choice('max_features', ['sqrt', 'log2']),
+    },
 }
 
 category_columns = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope']
@@ -55,7 +79,7 @@ def find_baseline(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dict[str, fl
     scaler = StandardScaler()
     results = {}
 
-    for name,  model in classifiers.items():
+    for name,  model in models.items():
         
         scaler.fit_transform(X_train)
         scaler.transform(X_test)
@@ -68,12 +92,14 @@ def find_baseline(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dict[str, fl
 
     return results
 
-def create_objective(classifier, df: pd.DataFrame, scale_values: bool = False):
+def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool = False):
 
     X = df.drop('HeartDisease', axis=1).values
     y = df['HeartDisease'].values
 
     def objective(search_space):
+
+        classifier = classifiers[classifier_name]
 
         try:
             model = classifier(**search_space, random_state=42)
@@ -103,6 +129,16 @@ def create_objective(classifier, df: pd.DataFrame, scale_values: bool = False):
         return {'loss': 1 - avg_score, 'status': STATUS_OK}
 
     return objective
+
+def optimize_hyperparams(classifier_name: str, train_df: pd.DataFrame, max_evals: int):
+    optimized_params = fmin(
+        fn=create_objective(classifier_name, train_df),
+        space=search_spaces[classifier_name],
+        algo=tpe.suggest,
+        max_evals=max_evals
+    )
+
+    return space_eval(search_spaces[classifier_name], optimized_params)
 
 if __name__ == '__main__':
     df = pd.read_csv("./heart_failure.csv")
