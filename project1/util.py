@@ -3,7 +3,7 @@ import scipy as scp
 import pandas as pd
 import seaborn as sn
 from matplotlib import pyplot
-from hyperopt import fmin, space_eval, hp, tpe, STATUS_OK
+from hyperopt import fmin, space_eval, hp, tpe, STATUS_OK, Trials
 
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -22,15 +22,15 @@ from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
 models = {
     'KNN'                : KNeighborsClassifier(),
-    'SVM'         : SVC(kernel="linear", C=0.025),
-    'Gaussian Process'   : GaussianProcessClassifier(1.0 * RBF(1.0)),
-    'Decision Tree'      : DecisionTreeClassifier(max_depth=5),
-    'Random Forest'      : RandomForestClassifier(max_depth=5),
-    'Neural Network'     : MLPClassifier(alpha=1, max_iter=1000),
-    'AdaBoost'           : AdaBoostClassifier(),
+    'SVM'                : SVC(kernel="linear", C=0.025, random_state=42),
+    'Gaussian Process'   : GaussianProcessClassifier(1.0 * RBF(1.0), random_state=42),
+    'Decision Tree'      : DecisionTreeClassifier(max_depth=5, random_state=42),
+    'Random Forest'      : RandomForestClassifier(max_depth=5, random_state=42),
+    'Neural Network'     : MLPClassifier(alpha=1, max_iter=1000, random_state=42),
+    'AdaBoost'           : AdaBoostClassifier(random_state=42),
     'Naive Bayes'        : GaussianNB(),
     'QDA'                : QuadraticDiscriminantAnalysis(),
-    'Logistic Regression': LogisticRegression(max_iter=500),
+    'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
 }
 
 classifiers = {
@@ -56,6 +56,28 @@ search_spaces = {
         'min_weight_fraction_leaf': hp.uniform('min_weight_fraction_leaf', 0, 0.05),
         'max_features': hp.choice('max_features', ['sqrt', 'log2']),
     },
+
+    'Logistic Regression': {
+        'penalty': hp.choice('penalty', ['l2']),
+        'C': hp.uniform('C', 0.90, 1.0),
+        'solver': hp.choice('solver', ['newton-cg', 'lbfgs', 'liblinear']),
+        'max_iter': hp.choice('max_iter', [1000])
+    },
+
+    'AdaBoost': {
+        'n_estimators': hp.randint('n_estimators', 20, 250),
+        'learning_rate': hp.uniform('learning_rate', 0, 2),
+        'algorithm': hp.choice('algorithm', ['SAMME', 'SAMME.R'])
+    },
+
+    'Neural Network': {
+        'hidden_layer_sizes': hp.choice('hidden_layer_sizes', [(100,)]),
+        'activation': hp.choice('activation', ['identity', 'logistic', 'tanh', 'relu']),
+        'solver': hp.choice('solver', ['lbfgs', 'sgd', 'adam']),
+        'alpha': hp.uniform('alpha', 0, 1e-3),
+        'learning_rate': hp.choice('learning_rate', ['constant', 'invscaling', 'adaptive']),
+        'max_iter': hp.choice('max_iter', [100])
+    },
 }
 
 category_columns = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope']
@@ -68,31 +90,36 @@ def preprocess(df: pd.DataFrame):
 
     return df
 
-def find_baseline(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dict[str, float]:
+def find_baseline(df: pd.DataFrame) -> dict[str, float]:
 
-    X_train = train_df.drop('HeartDisease', axis=1).values
-    X_test = test_df.drop('HeartDisease', axis=1).values
-
-    y_train = train_df['HeartDisease'].values
-    y_test = test_df['HeartDisease'].values
+    X = df.drop('HeartDisease', axis=1).values
+    y = df['HeartDisease'].values
 
     scaler = StandardScaler()
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
     results = {}
 
     for name,  model in models.items():
-        
-        scaler.fit_transform(X_train)
-        scaler.transform(X_test)
+        scores = []
 
-        model.fit(X=X_train, y=y_train)
-        y_pred = model.predict(X_test)
+        for train_index, test_index in kf.split(X):
+            X_train, X_test = X[train_index], X[test_index]
+            y_train, y_test = y[train_index], y[test_index]
 
-        score = accuracy_score(y_test, y_pred)
-        results[name] = score
+            scaler.fit_transform(X_train)
+            scaler.transform(X_test)
+
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+
+            score = accuracy_score(y_test, y_pred)
+            scores.append(score)
+
+        results[name] = sum(scores) / len(scores)
 
     return results
 
-def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool = False):
+def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool):
 
     X = df.drop('HeartDisease', axis=1).values
     y = df['HeartDisease'].values
@@ -130,15 +157,21 @@ def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool 
 
     return objective
 
-def optimize_hyperparams(classifier_name: str, train_df: pd.DataFrame, max_evals: int):
+def optimize_hyperparams(classifier_name: str, df: pd.DataFrame, max_evals: int, scale_values: bool = True):
+
+    trials = Trials()
+
     optimized_params = fmin(
-        fn=create_objective(classifier_name, train_df),
+        fn=create_objective(classifier_name, df, scale_values=scale_values),
         space=search_spaces[classifier_name],
         algo=tpe.suggest,
-        max_evals=max_evals
+        max_evals=max_evals,
+        trials=trials
     )
 
-    return space_eval(search_spaces[classifier_name], optimized_params)
+    losses = [ trial['result']['loss'] for trial in trials ]
+
+    return space_eval(search_spaces[classifier_name], optimized_params), losses
 
 if __name__ == '__main__':
     df = pd.read_csv("./heart_failure.csv")
