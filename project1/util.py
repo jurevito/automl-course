@@ -4,6 +4,7 @@ import pandas as pd
 import seaborn as sn
 from matplotlib import pyplot
 from hyperopt import fmin, space_eval, hp, tpe, STATUS_OK, Trials
+from typing import Protocol
 
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -19,6 +20,12 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+
+class ScikitModel(Protocol):
+    def fit(self, X, y, sample_weight=None): ...
+    def predict(self, X): ...
+    def score(self, X, y, sample_weight=None): ...
+    def set_params(self, **params): ...
 
 models = {
     'KNN'                : KNeighborsClassifier(),
@@ -129,9 +136,9 @@ def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool)
         classifier = classifiers[classifier_name]
 
         try:
-            model = classifier(**search_space, random_state=42)
+            model: ScikitModel = classifier(**search_space, random_state=42)
         except:
-            model = classifier(**search_space)
+            model: ScikitModel = classifier(**search_space)
 
         scaler = StandardScaler()
         kf = KFold(n_splits=5, shuffle=True, random_state=42)
