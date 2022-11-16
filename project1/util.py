@@ -4,7 +4,7 @@ import pandas as pd
 import seaborn as sn
 from matplotlib import pyplot
 from hyperopt import fmin, space_eval, hp, tpe, STATUS_OK, Trials
-from typing import Protocol, Dict
+from typing import Protocol, Dict, List
 
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -186,6 +186,9 @@ def optimize_hyperparams(classifier_name: str, df: pd.DataFrame, max_evals: int,
     losses = [trial['result']['loss'] for trial in trials]
 
     return space_eval(search_spaces[classifier_name], optimized_params), losses
+
+def pd_insert_row(df: pd.DataFrame, row: List) -> pd.DataFrame:
+    return pd.concat([pd.DataFrame([row], columns=df.columns), df], ignore_index=True)
 
 
 if __name__ == '__main__':
