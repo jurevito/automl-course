@@ -170,23 +170,6 @@ def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool)
     return objective
 
 
-def optimize_hyperparams(classifier_name: str, df: pd.DataFrame, max_evals: int, scale_values: bool = True,
-                         verbose: bool = True):
-    trials = Trials()
-
-    optimized_params = fmin(
-        fn=create_objective(classifier_name, df, scale_values=scale_values),
-        space=search_spaces[classifier_name],
-        algo=tpe.suggest,
-        max_evals=max_evals,
-        trials=trials,
-        verbose=verbose
-    )
-
-    losses = [trial['result']['loss'] for trial in trials]
-
-    return space_eval(search_spaces[classifier_name], optimized_params), losses
-
 def pd_insert_row(df: pd.DataFrame, row: List) -> pd.DataFrame:
     return pd.concat([pd.DataFrame([row], columns=df.columns), df], ignore_index=True)
 
