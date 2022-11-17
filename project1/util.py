@@ -170,6 +170,45 @@ def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool)
     return objective
 
 
+def get_min_budgets(X_train, X_test, y_train, y_test, classifier_names, baseline_score, df):
+    min_budget_score = pd.DataFrame(columns=['Classifier', 'Minimum_Budget', 'Accuracy'])
+
+    for classifier_name in classifier_names:
+        def early_stop(result, *_):
+            params = space_eval(search_spaces[classifier_name], trials.argmin)
+            model = classifiers[classifier_name](**params, random_state=42)
+            model.fit(X_train, y_train)
+
+            y_pred = model.predict(X_test)
+
+            acc = accuracy_score(y_test, y_pred)
+            result.attachments['latest_score'] = acc
+
+            return acc > baseline_score, []
+
+        trials = Trials()
+
+        optimized_params = fmin(
+            fn=create_objective(classifier_name, df, scale_values=True),
+            space=search_spaces[classifier_name],
+            algo=tpe.suggest,
+            max_evals=100,
+            trials=trials,
+            verbose=False,
+            rstate=np.random.default_rng(42),
+            early_stop_fn=early_stop,
+            return_argmin=False
+        )
+
+        # losses = [trial['result']['loss'] for trial in trials]
+        min_budget_score = pd_insert_row(
+            min_budget_score,
+            [classifier_name, len(trials), trials.attachments['latest_score']]
+        )
+
+    return min_budget_score
+
+
 def pd_insert_row(df: pd.DataFrame, row: List) -> pd.DataFrame:
     return pd.concat([pd.DataFrame([row], columns=df.columns), df], ignore_index=True)
 
