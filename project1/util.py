@@ -25,7 +25,7 @@ from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 class ScikitModel(Protocol):
     def fit(self, X, y, sample_weight=None): ...
 
-    def predict(self, X): ...
+    def predict(self, X) -> np.ndarray: ...
 
     def score(self, X, y, sample_weight=None): ...
 
@@ -172,6 +172,7 @@ def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool)
 
 def get_min_budgets(X_train, X_test, y_train, y_test, classifier_names, baseline_score, df):
     min_budget_score = pd.DataFrame(columns=['Classifier', 'Minimum_Budget', 'Accuracy'])
+    model_predictions = {}
 
     for classifier_name in classifier_names:
         def early_stop(result, *_):
@@ -183,6 +184,7 @@ def get_min_budgets(X_train, X_test, y_train, y_test, classifier_names, baseline
 
             acc = accuracy_score(y_test, y_pred)
             result.attachments['latest_score'] = acc
+            result.attachments['latest_model_predictions'] = y_pred
 
             return acc > baseline_score, []
 
@@ -205,8 +207,9 @@ def get_min_budgets(X_train, X_test, y_train, y_test, classifier_names, baseline
             min_budget_score,
             [classifier_name, len(trials), trials.attachments['latest_score']]
         )
+        model_predictions[classifier_name] = trials.attachments['latest_model_predictions']
 
-    return min_budget_score
+    return min_budget_score, model_predictions
 
 
 def pd_insert_row(df: pd.DataFrame, row: List) -> pd.DataFrame:
