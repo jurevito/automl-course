@@ -21,6 +21,9 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.ensemble import BaggingClassifier
+from sklearn.ensemble import GradientBoostingClassifier
 
 class ScikitModel(Protocol):
     def fit(self, X, y, sample_weight=None): ...
@@ -43,6 +46,9 @@ models = {
     'Naive Bayes'        : GaussianNB(),
     'QDA'                : QuadraticDiscriminantAnalysis(),
     'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
+    'LDA'                : LinearDiscriminantAnalysis(),
+    'Bagging Classifier' : BaggingClassifier(random_state=42),
+    'Gradient Boosting'  : GradientBoostingClassifier(random_state=42),
 }
 
 classifiers = {
@@ -56,6 +62,9 @@ classifiers = {
     'Naive Bayes'        : GaussianNB,
     'QDA'                : QuadraticDiscriminantAnalysis,
     'Logistic Regression': LogisticRegression,
+    'LDA'                : LinearDiscriminantAnalysis,
+    'Bagging Classifier' : BaggingClassifier,
+    'Gradient Boosting'  : GradientBoostingClassifier,
 }
 
 search_spaces = {
@@ -89,6 +98,82 @@ search_spaces = {
         'alpha'             : hp.uniform('alpha', 0, 1e-3),
         'learning_rate'     : hp.choice('learning_rate', ['constant', 'invscaling', 'adaptive']),
         'max_iter'          : hp.choice('max_iter', [100])
+    },
+    
+    'Decision Tree'     : {
+        #'criterion'         : hp.choice('criterion', ['gini', 'entropy', 'log_loss']),
+        'splitter'          : hp.choice('splitter', ['best', 'random']),
+        #'max_depth'         : hp.randint('max_depth', 1, 30),
+        'min_samples_split' : hp.uniform('min_samples_split', 0.1, 1.0),
+        #'min_samples_leaf'  : hp.uniform('min_samples_leaf', 0.1, 0.5)
+        'max_features'      : hp.choice('max_features', ['sqrt', 'log2'])
+    },
+
+    'Gaussian Process'     : {
+        'kernel'               : hp.choice('kernel', [1.0 * RBF(1.0)]),
+        #'optimizer'            : hp.choice('optimizer', ['fmin_l_bfgs_b']),
+        #'n_restarts_optimizer' : hp.randint('n_restarts_optimizer', 10),
+        #'max_iter_predict'     : hp.randint('max_iter_predict', 50 , 200),
+        #'warm_start'           : hp.choice('warm_start', [True, False]),
+        #'copy_X_train'         : hp.choice('copy_X_train', [True, False]),
+        #'multi_class'          : hp.choice('multi_class', ['one_vs_rest', 'one_vs_one'])
+    },
+
+    'SVM'     : {
+        #'C'                     : hp.choice('C', [0.9, 1.0]),
+        'kernel'                : hp.choice('kernel', ['linear', 'poly', 'rbf', 'sigmoid', 'precomputed']),
+        #'degree'                : hp.randint('degree', 5),
+        #'gamma'                 : hp.choice('gamma', ['scale', 'auto']),
+        #'coef0'                 : hp.choice('coef0', [0.01, 0.05, 0.8, 1.0]),
+        #'shrinking'             : hp.choice('shrinking', [True, False]),
+        #'probability'           : hp.choice('probability', [True, False]),
+        #'tol'                   : hp.uniform('tol', 0.0001, 1e-3),
+        #'cache_size'            : hp.choice('cache_size', [100, 200, 300]),
+    },
+    
+    'KNN'     : {
+        'n_neighbors'       : hp.choice('n_neighbors', [2, 5, 10]),
+        'weights'           : hp.choice('weights', ['uniform', 'distance']),
+        'algorithm'         : hp.choice('algorithm', ['auto', 'ball_tree', 'kd_tree']),
+        'leaf_size'         : hp.choice('leaf_size', [5, 10, 30, 60, 90, 120]),
+        'p'                 : hp.choice('p', [1, 2]),
+        'metric'            : hp.choice('metric', ['minkowski'])
+    },
+
+    'Naive Bayes'     : {
+        'var_smoothing'     : hp.choice('var_smoothing', [1e-11, 1e-10, 1e-9])
+    },
+    
+    'QDA'     : {
+        #'reg_param'         : hp.uniform('reg_param', 0.0, 1.0),
+        'store_covariance'  : hp.choice('store_covariance', [True, False])
+    },
+    
+    'LDA'     : {
+        'solver'            : hp.choice('solver', ['svd', 'lsqr', 'eigen']),
+        'n_components'      : hp.choice('n_components', [0, 1, None]),
+        'store_covariance'  : hp.choice('store_covariance', [True, False]),
+        'tol'               : hp.choice('tol', [0.00001, 0.0001, 0.001])
+    },
+    
+    'Bagging Classifier': {
+        'n_estimators'      : hp.randint('n_estimators', 5, 50),
+        'max_samples'       : hp.uniform('max_samples', 0.1, 1.0),
+        'max_features'      : hp.uniform('max_features', 0.1, 1.0),
+        'bootstrap'         : hp.choice('bootstrap', [True, False]),
+        'bootstrap_features': hp.choice('bootstrap_features', [True, False])
+    },
+    
+    'Gradient Boosting': {
+        'learning_rate'            : hp.uniform('learning_rate', 0.0, 0.3),
+        'n_estimators'             : hp.choice('n_estimators', [100]),
+        'subsample'                : hp.uniform('subsample', 0.1, 1.0),
+        'criterion'                : hp.choice('criterion', ['friedman_mse', 'squared_error']),
+        'min_samples_split'        : hp.uniform('min_samples_split', 0.1, 1.0),
+        #'min_samples_leaf'         : hp.uniform('min_samples_leaf', 0.1, 1.0),
+        #'min_weight_fraction_leaf' : hp.uniform('min_weight_fraction_leaf', 0.0, 0.5), #max accuracy
+        'max_depth'                : hp.randint('max_depth', 1, 200),
+        'max_features'             : hp.choice('max_features', ['sqrt', 'log2', None]),
     },
 }
 
@@ -177,7 +262,13 @@ def get_min_budgets(X_train, X_test, y_train, y_test, classifier_names, baseline
     for classifier_name in classifier_names:
         def early_stop(result, *_):
             params = space_eval(search_spaces[classifier_name], trials.argmin)
-            model = classifiers[classifier_name](**params, random_state=42)
+            
+            try:
+                model = classifiers[classifier_name](**params, random_state=42)
+            except:
+                model = classifiers[classifier_name](**params)
+            
+            #model = classifiers[classifier_name](**params, random_state=42)
             model.fit(X_train, y_train)
 
             y_pred = model.predict(X_test)
@@ -208,6 +299,7 @@ def get_min_budgets(X_train, X_test, y_train, y_test, classifier_names, baseline
             [classifier_name, len(trials), trials.attachments['latest_score']]
         )
         model_predictions[classifier_name] = trials.attachments['latest_model_predictions']
+        
 
     return min_budget_score, model_predictions
 
