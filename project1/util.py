@@ -5,6 +5,7 @@ import seaborn as sn
 from matplotlib import pyplot
 from hyperopt import fmin, space_eval, hp, tpe, STATUS_OK, Trials
 from typing import Protocol, Dict, List
+from scipy.stats import wilcoxon
 
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -280,58 +281,50 @@ def optimize_hyperparams(classifier_name: str, df: pd.DataFrame, max_evals: int,
 
     return best_params, losses, params
 
-def get_min_budgets(X_train, X_test, y_train, y_test, classifier_names, baseline_score, df):
-    min_budget_score = pd.DataFrame(columns=['Classifier', 'Minimum_Budget', 'Accuracy'])
-    model_predictions = {}
+def compare_with_baseline(baseline: str, optimization_results: dict, train_df: pd.DataFrame, test_df: pd.DataFrame) -> dict:
 
-    for classifier_name in classifier_names:
-        def early_stop(result, *_):
-            params = space_eval(search_spaces[classifier_name], trials.argmin)
-            
-            try:
-                model = classifiers[classifier_name](**params, random_state=42)
-            except:
-                model = classifiers[classifier_name](**params)
-            
-            #model = classifiers[classifier_name](**params, random_state=42)
-            model.fit(X_train, y_train)
+    X_train = train_df.drop('HeartDisease', axis=1).values
+    X_test = test_df.drop('HeartDisease', axis=1).values
 
-            y_pred = model.predict(X_test)
+    y_train = train_df['HeartDisease'].values
+    y_test = test_df['HeartDisease'].values
 
-            acc = accuracy_score(y_test, y_pred)
-            result.attachments['latest_score'] = acc
-            result.attachments['latest_model_predictions'] = y_pred
+    scaler = StandardScaler()
+    scaler.fit_transform(X_train)
+    scaler.transform(X_test)
 
-            return acc > baseline_score, []
+    # Train a baseline model.
+    model: ScikitModel = models[baseline]
+    model.fit(X_train, y_train)
+    y_pred_baseline = model.predict(X_test)
+    score_baseline = accuracy_score(y_test, y_pred_baseline)
 
-        trials = Trials()
+    results = {}
 
-        optimized_params = fmin(
-            fn=create_objective(classifier_name, df, scale_values=True),
-            space=search_spaces[classifier_name],
-            algo=tpe.suggest,
-            max_evals=100,
-            trials=trials,
-            verbose=False,
-            rstate=np.random.default_rng(42),
-            early_stop_fn=early_stop,
-            return_argmin=False
-        )
+    for classifier_name in classifiers:
+        classifier = classifiers[classifier_name]
+        params = optimization_results[classifier_name]['best']
 
-        # losses = [trial['result']['loss'] for trial in trials]
-        min_budget_score = pd_insert_row(
-            min_budget_score,
-            [classifier_name, len(trials), trials.attachments['latest_score']]
-        )
-        model_predictions[classifier_name] = trials.attachments['latest_model_predictions']
-        
+        try:
+            model: ScikitModel = classifier(**params, random_state=42)
+        except:
+            model: ScikitModel = classifier(**params)
 
-    return min_budget_score, model_predictions
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+        score = accuracy_score(y_test, y_pred)
 
+        stat, p_value = 1.0, 1.0
+        if not (y_pred_baseline==y_pred).all():
+            stat, p_value = wilcoxon(y_pred_baseline, y_pred)
 
-def pd_insert_row(df: pd.DataFrame, row: List) -> pd.DataFrame:
-    return pd.concat([pd.DataFrame([row], columns=df.columns), df], ignore_index=True)
+        results[classifier_name] = {
+            'stat': stat,
+            'p_value': p_value,
+            'score': score,
+        }
 
+    return score_baseline, results
 
 if __name__ == '__main__':
     df = pd.read_csv("./heart_failure.csv")
