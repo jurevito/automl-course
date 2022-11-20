@@ -9,22 +9,20 @@ from scipy.stats import wilcoxon
 
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.compose import make_column_transformer
 from sklearn.model_selection import KFold
 
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from sklearn.gaussian_process import GaussianProcessClassifier
 from sklearn.gaussian_process.kernels import RBF
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, BaggingClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
-
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.ensemble import BaggingClassifier
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 
 class ScikitModel(Protocol):
     def fit(self, X, y, sample_weight=None): ...
@@ -175,13 +173,19 @@ search_spaces = {
 }
 
 category_columns = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope']
+# need_one_hot = ['SVM', 'Logistic Regression', 'KNN', 'LDA', 'Neural Network', 'Gaussian Process', 'Decision Tree']
 
-def preprocess(df: pd.DataFrame):
-    le = LabelEncoder()
-    for column in category_columns:
-        df[column] = le.fit_transform(df[column])
+def one_hot_encode(X_train, X_test):
 
-    return df
+    transformer = make_column_transformer(
+        (OneHotEncoder(), [2, 6, 10]),
+        remainder='passthrough'
+    )
+
+    X_train = transformer.fit_transform(X_train)
+    X_test = transformer.transform(X_test)
+
+    return X_train, X_test
 
 def find_baseline(df: pd.DataFrame) -> Dict[str, float]:
     X = df.drop('HeartDisease', axis=1).values
@@ -198,6 +202,7 @@ def find_baseline(df: pd.DataFrame) -> Dict[str, float]:
             X_train, X_test = X[train_index], X[test_index]
             y_train, y_test = y[train_index], y[test_index]
 
+            X_train, X_test = one_hot_encode(X_train, X_test)
             scaler.fit_transform(X_train)
             scaler.transform(X_test)
 
@@ -211,13 +216,13 @@ def find_baseline(df: pd.DataFrame) -> Dict[str, float]:
 
     return results
 
-def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool):
+def create_objective(name: str, df: pd.DataFrame):
     X = df.drop('HeartDisease', axis=1).values
     y = df['HeartDisease'].values
 
     def objective(search_space):
 
-        classifier = classifiers[classifier_name]
+        classifier = classifiers[name]
 
         try:
             model: ScikitModel = classifier(**search_space, random_state=42)
@@ -232,9 +237,9 @@ def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool)
             X_train, X_test = X[train_index], X[test_index]
             y_train, y_test = y[train_index], y[test_index]
 
-            if scale_values:
-                scaler.fit_transform(X_train)
-                scaler.transform(X_test)
+            X_train, X_test = one_hot_encode(X_train, X_test)
+            scaler.fit_transform(X_train)
+            scaler.transform(X_test)
 
             model.fit(X_train, y_train)
 
@@ -257,27 +262,27 @@ def unpack_vals(values: dict):
 
     return vals
 
-def optimize_hyperparams(classifier_name: str, df: pd.DataFrame, max_evals: int, scale_values: bool = True):
+def optimize_hyperparams(name: str, df: pd.DataFrame, max_evals: int, scale_values: bool = True):
 
     trials = Trials()
 
     optimized_params = fmin(
-        fn=create_objective(classifier_name, df, scale_values=scale_values),
-        space=search_spaces[classifier_name],
+        fn=create_objective(name, df),
+        space=search_spaces[name],
         algo=tpe.suggest,
         max_evals=max_evals,
         trials=trials,
         rstate=np.random.default_rng(42),
     )
 
-    best_params = space_eval(search_spaces[classifier_name], optimized_params)
+    best_params = space_eval(search_spaces[name], optimized_params)
     losses = []
     params = []
 
     # Save losses and corresponding hyperparameter configurations.
     for trial in trials:
         losses.append(trial['result']['loss'])
-        params.append(space_eval(search_spaces[classifier_name], unpack_vals(trial)))
+        params.append(space_eval(search_spaces[name], unpack_vals(trial)))
 
     return best_params, losses, params
 
@@ -289,6 +294,7 @@ def compare_with_baseline(baseline: str, optimization_results: dict, train_df: p
     y_train = train_df['HeartDisease'].values
     y_test = test_df['HeartDisease'].values
 
+    X_train, X_test = one_hot_encode(X_train, X_test)
     scaler = StandardScaler()
     scaler.fit_transform(X_train)
     scaler.transform(X_test)
@@ -301,9 +307,9 @@ def compare_with_baseline(baseline: str, optimization_results: dict, train_df: p
 
     results = {}
 
-    for classifier_name in classifiers:
-        classifier = classifiers[classifier_name]
-        params = optimization_results[classifier_name]['best']
+    for name in classifiers:
+        classifier = classifiers[name]
+        params = optimization_results[name]['best']
 
         try:
             model: ScikitModel = classifier(**params, random_state=42)
@@ -318,7 +324,7 @@ def compare_with_baseline(baseline: str, optimization_results: dict, train_df: p
         if not (y_pred_baseline==y_pred).all():
             stat, p_value = wilcoxon(y_pred_baseline, y_pred)
 
-        results[classifier_name] = {
+        results[name] = {
             'stat': stat,
             'p_value': p_value,
             'score': score,
@@ -326,7 +332,45 @@ def compare_with_baseline(baseline: str, optimization_results: dict, train_df: p
 
     return score_baseline, results
 
+def find_min_budget(baseline: str, train_df: pd.DataFrame, test_df: pd.DataFrame, optimization_results: dict):
+
+    X_train = train_df.drop('HeartDisease', axis=1).values
+    X_test = test_df.drop('HeartDisease', axis=1).values
+
+    y_train = train_df['HeartDisease'].values
+    y_test = test_df['HeartDisease'].values
+
+    X_train, X_test = one_hot_encode(X_train, X_test)
+    scaler = StandardScaler()
+    scaler.fit_transform(X_train)
+    scaler.transform(X_test)
+
+    # Train a baseline model.
+    model: ScikitModel = models[baseline]
+    model.fit(X_train, y_train)
+    y_pred_baseline = model.predict(X_test)
+    score_baseline = accuracy_score(y_test, y_pred_baseline)
+
+    for name in classifiers:
+        optimization_results[name]['min_budget'] = len(optimization_results[name]['losses'])
+
+        for step, params in enumerate(optimization_results[name]['params']):
+            classifier = classifiers[name]
+
+            try:
+                model: ScikitModel = classifier(**params, random_state=42)
+            except:
+                model: ScikitModel = classifier(**params)
+
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            score = accuracy_score(y_test, y_pred)
+
+            if score > score_baseline:
+                optimization_results[name]['min_budget'] = step+1
+                break
+
+
+
 if __name__ == '__main__':
     df = pd.read_csv("./heart_failure.csv")
-    df = preprocess(df)
-    find_baseline(df)
