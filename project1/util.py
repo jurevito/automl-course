@@ -96,7 +96,7 @@ search_spaces = {
         'learning_rate'     : hp.choice('learning_rate', ['constant', 'invscaling', 'adaptive']),
         'max_iter'          : hp.choice('max_iter', [100])
     },
-    
+
     'Decision Tree'     : {
         #'criterion'         : hp.choice('criterion', ['gini', 'entropy', 'log_loss']),
         'splitter'          : hp.choice('splitter', ['best', 'random']),
@@ -110,7 +110,7 @@ search_spaces = {
         'kernel'               : hp.choice('kernel', [1.0 * RBF(1.0)]),
         #'optimizer'            : hp.choice('optimizer', ['fmin_l_bfgs_b']),
         #'n_restarts_optimizer' : hp.randint('n_restarts_optimizer', 10),
-        #'max_iter_predict'     : hp.randint('max_iter_predict', 50 , 200),
+        'max_iter_predict'     : hp.randint('max_iter_predict', 5, 200),
         #'warm_start'           : hp.choice('warm_start', [True, False]),
         #'copy_X_train'         : hp.choice('copy_X_train', [True, False]),
         #'multi_class'          : hp.choice('multi_class', ['one_vs_rest', 'one_vs_one'])
@@ -127,32 +127,32 @@ search_spaces = {
         #'tol'                   : hp.uniform('tol', 0.0001, 1e-3),
         #'cache_size'            : hp.choice('cache_size', [100, 200, 300]),
     },
-    
+
     'KNN'     : {
-        'n_neighbors'       : hp.choice('n_neighbors', [2, 5, 10]),
+        'n_neighbors'       : hp.randint('n_neighbors', 2, 100),
         'weights'           : hp.choice('weights', ['uniform', 'distance']),
         'algorithm'         : hp.choice('algorithm', ['auto', 'ball_tree', 'kd_tree']),
-        'leaf_size'         : hp.choice('leaf_size', [5, 10, 30, 60, 90, 120]),
+        'leaf_size'         : hp.randint('leaf_size', 2, 120),
         'p'                 : hp.choice('p', [1, 2]),
-        'metric'            : hp.choice('metric', ['minkowski'])
+        # 'metric'            : hp.choice('metric', ['minkowski', 'manhattan'])
     },
 
     'Naive Bayes'     : {
-        'var_smoothing'     : hp.choice('var_smoothing', [1e-11, 1e-10, 1e-9])
+        'var_smoothing'     : hp.uniform('var_smoothing', 1e-11, 1e-9)
     },
-    
+
     'QDA'     : {
-        #'reg_param'         : hp.uniform('reg_param', 0.0, 1.0),
+        'reg_param'         : hp.uniform('reg_param', 0.0, 1.0),
         'store_covariance'  : hp.choice('store_covariance', [True, False])
     },
-    
+
     'LDA'     : {
         'solver'            : hp.choice('solver', ['svd', 'lsqr', 'eigen']),
         'n_components'      : hp.choice('n_components', [0, 1, None]),
         'store_covariance'  : hp.choice('store_covariance', [True, False]),
-        'tol'               : hp.choice('tol', [0.00001, 0.0001, 0.001])
+        'tol'               : hp.uniform('tol', 0.0001, 0.01)
     },
-    
+
     'Bagging Classifier': {
         'n_estimators'      : hp.randint('n_estimators', 5, 50),
         'max_samples'       : hp.uniform('max_samples', 0.1, 1.0),
@@ -160,15 +160,15 @@ search_spaces = {
         'bootstrap'         : hp.choice('bootstrap', [True, False]),
         'bootstrap_features': hp.choice('bootstrap_features', [True, False])
     },
-    
+
     'Gradient Boosting': {
-        'learning_rate'            : hp.uniform('learning_rate', 0.0, 0.3),
-        'n_estimators'             : hp.choice('n_estimators', [100]),
+        'learning_rate'            : hp.uniform('learning_rate', 0.0001, 0.01),
+        'n_estimators'             : hp.randint('n_estimators', 2, 100),
         'subsample'                : hp.uniform('subsample', 0.1, 1.0),
         'criterion'                : hp.choice('criterion', ['friedman_mse', 'squared_error']),
         'min_samples_split'        : hp.uniform('min_samples_split', 0.1, 1.0),
-        #'min_samples_leaf'         : hp.uniform('min_samples_leaf', 0.1, 1.0),
-        #'min_weight_fraction_leaf' : hp.uniform('min_weight_fraction_leaf', 0.0, 0.5), #max accuracy
+        'min_samples_leaf'         : hp.uniform('min_samples_leaf', 0.1, 1.0),
+        # 'min_weight_fraction_leaf' : hp.uniform('min_weight_fraction_leaf', 0.0, 0.5),  # not if min_samples_leaf
         'max_depth'                : hp.randint('max_depth', 1, 200),
         'max_features'             : hp.choice('max_features', ['sqrt', 'log2', None]),
     },
