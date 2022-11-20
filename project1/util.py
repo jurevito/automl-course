@@ -27,13 +27,9 @@ from sklearn.ensemble import GradientBoostingClassifier
 
 class ScikitModel(Protocol):
     def fit(self, X, y, sample_weight=None): ...
-
     def predict(self, X) -> np.ndarray: ...
-
     def score(self, X, y, sample_weight=None): ...
-
     def set_params(self, **params): ...
-
 
 models = {
     'KNN'                : KNeighborsClassifier(),
@@ -121,7 +117,7 @@ search_spaces = {
 
     'SVM'     : {
         #'C'                     : hp.choice('C', [0.9, 1.0]),
-        'kernel'                : hp.choice('kernel', ['linear', 'poly', 'rbf', 'sigmoid', 'precomputed']),
+        'kernel'                : hp.choice('kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
         #'degree'                : hp.randint('degree', 5),
         #'gamma'                 : hp.choice('gamma', ['scale', 'auto']),
         #'coef0'                 : hp.choice('coef0', [0.01, 0.05, 0.8, 1.0]),
@@ -179,14 +175,12 @@ search_spaces = {
 
 category_columns = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope']
 
-
 def preprocess(df: pd.DataFrame):
     le = LabelEncoder()
     for column in category_columns:
         df[column] = le.fit_transform(df[column])
 
     return df
-
 
 def find_baseline(df: pd.DataFrame) -> Dict[str, float]:
     X = df.drop('HeartDisease', axis=1).values
@@ -215,7 +209,6 @@ def find_baseline(df: pd.DataFrame) -> Dict[str, float]:
         results[name] = sum(scores) / len(scores)
 
     return results
-
 
 def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool):
     X = df.drop('HeartDisease', axis=1).values
@@ -254,6 +247,38 @@ def create_objective(classifier_name: str, df: pd.DataFrame, scale_values: bool)
 
     return objective
 
+
+def unpack_vals(values: dict):
+    vals = {}
+    for key, value in values['misc']['vals'].items():
+        if value:
+            vals[key] = value[0]
+
+    return vals
+
+def optimize_hyperparams(classifier_name: str, df: pd.DataFrame, max_evals: int, scale_values: bool = True):
+
+    trials = Trials()
+
+    optimized_params = fmin(
+        fn=create_objective(classifier_name, df, scale_values=scale_values),
+        space=search_spaces[classifier_name],
+        algo=tpe.suggest,
+        max_evals=max_evals,
+        trials=trials,
+        rstate=np.random.default_rng(42),
+    )
+
+    best_params = space_eval(search_spaces[classifier_name], optimized_params)
+    losses = []
+    params = []
+
+    # Save losses and corresponding hyperparameter configurations.
+    for trial in trials:
+        losses.append(trial['result']['loss'])
+        params.append(space_eval(search_spaces[classifier_name], unpack_vals(trial)))
+
+    return best_params, losses, params
 
 def get_min_budgets(X_train, X_test, y_train, y_test, classifier_names, baseline_score, df):
     min_budget_score = pd.DataFrame(columns=['Classifier', 'Minimum_Budget', 'Accuracy'])
