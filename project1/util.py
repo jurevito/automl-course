@@ -3,7 +3,7 @@ import scipy as scp
 import pandas as pd
 import seaborn as sn
 from matplotlib import pyplot
-from hyperopt import fmin, space_eval, hp, tpe, STATUS_OK, Trials
+from hyperopt import fmin, space_eval, hp, tpe, STATUS_OK, STATUS_FAIL, Trials
 from typing import Protocol, Dict, List
 from scipy.stats import wilcoxon
 
@@ -63,7 +63,7 @@ classifiers = {
 }
 
 search_spaces = {
-    'Random Forest'      : {
+    'Random Forest': {
         'n_estimators'            : hp.randint('n_estimators', 50, 150),
         'criterion'               : hp.choice('criterion', ['gini', 'entropy', 'log_loss']),
         'max_depth'               : hp.randint('max_depth', 10, 200),
@@ -75,19 +75,19 @@ search_spaces = {
 
     'Logistic Regression': {
         'penalty' : hp.choice('penalty', ['l2']),
-        'C'       : hp.uniform('C', 0.90, 1.0),
+        'C'       : hp.uniform('C', 0.95, 1.0),
         'solver'  : hp.choice('solver', ['newton-cg', 'lbfgs', 'liblinear']),
         'max_iter': hp.choice('max_iter', [1000])
     },
 
-    'AdaBoost'           : {
-        'n_estimators' : hp.randint('n_estimators', 20, 250),
-        'learning_rate': hp.uniform('learning_rate', 0, 2),
+    'AdaBoost': {
+        'n_estimators' : hp.randint('n_estimators', 20, 500),
+        'learning_rate': hp.uniform('learning_rate', 0.8, 2.0),
         'algorithm'    : hp.choice('algorithm', ['SAMME', 'SAMME.R'])
     },
 
-    'Neural Network'     : {
-        'hidden_layer_sizes': hp.choice('hidden_layer_sizes', [(100,)]),
+    'Neural Network': {
+        'hidden_layer_sizes': hp.choice('hidden_layer_sizes', [(100,), (50,), (200,), (150,)]),
         'activation'        : hp.choice('activation', ['identity', 'logistic', 'tanh', 'relu']),
         'solver'            : hp.choice('solver', ['lbfgs', 'sgd', 'adam']),
         'alpha'             : hp.uniform('alpha', 0, 1e-3),
@@ -95,85 +95,77 @@ search_spaces = {
         'max_iter'          : hp.choice('max_iter', [100])
     },
 
-    'Decision Tree'     : {
-        #'criterion'         : hp.choice('criterion', ['gini', 'entropy', 'log_loss']),
-        'splitter'          : hp.choice('splitter', ['best', 'random']),
-        #'max_depth'         : hp.randint('max_depth', 1, 30),
-        'min_samples_split' : hp.uniform('min_samples_split', 0.1, 1.0),
-        #'min_samples_leaf'  : hp.uniform('min_samples_leaf', 0.1, 0.5)
-        'max_features'      : hp.choice('max_features', ['sqrt', 'log2'])
+    'Decision Tree': {
+        'criterion'         : hp.choice('criterion', ['gini', 'entropy', 'log_loss']),
+        'max_depth'         : hp.randint('max_depth', 2, 20),
+        'min_samples_split' : hp.randint('min_samples_split', 2, 3),
+        'min_samples_leaf'  : hp.randint('min_samples_leaf', 1, 2),
+        'max_features'      : hp.choice('max_features', ['auto', 'sqrt', 'log2', None])
     },
 
-    'Gaussian Process'     : {
+    'Gaussian Process': {
         'kernel'               : hp.choice('kernel', [1.0 * RBF(1.0)]),
-        #'optimizer'            : hp.choice('optimizer', ['fmin_l_bfgs_b']),
-        #'n_restarts_optimizer' : hp.randint('n_restarts_optimizer', 10),
-        'max_iter_predict'     : hp.randint('max_iter_predict', 5, 200),
-        #'warm_start'           : hp.choice('warm_start', [True, False]),
-        #'copy_X_train'         : hp.choice('copy_X_train', [True, False]),
-        #'multi_class'          : hp.choice('multi_class', ['one_vs_rest', 'one_vs_one'])
+        'n_restarts_optimizer' : hp.randint('n_restarts_optimizer', 0, 5),
+        'warm_start'           : hp.choice('warm_start', [False, True]),
+        'max_iter_predict'     : hp.choice('max_iter_predict', [250]),
+        'n_jobs'               : hp.choice('n_jobs', [-1]),
     },
 
-    'SVM'     : {
-        #'C'                     : hp.choice('C', [0.9, 1.0]),
+    'SVM': {
+        'C'                     : hp.uniform('C', 0.95, 1.0),
         'kernel'                : hp.choice('kernel', ['linear', 'poly', 'rbf', 'sigmoid']),
-        #'degree'                : hp.randint('degree', 5),
-        #'gamma'                 : hp.choice('gamma', ['scale', 'auto']),
-        #'coef0'                 : hp.choice('coef0', [0.01, 0.05, 0.8, 1.0]),
-        #'shrinking'             : hp.choice('shrinking', [True, False]),
-        #'probability'           : hp.choice('probability', [True, False]),
-        #'tol'                   : hp.uniform('tol', 0.0001, 1e-3),
-        #'cache_size'            : hp.choice('cache_size', [100, 200, 300]),
+        'gamma'                 : hp.choice('gamma', ['scale', 'auto']),
+        'break_ties'            : hp.choice('break_ties', [False, True]),
+        'max_iter'              : hp.choice('max_iter', [1000]),
     },
 
-    'KNN'     : {
-        'n_neighbors'       : hp.randint('n_neighbors', 2, 100),
+    'KNN': {
+        'n_neighbors'       : hp.randint('n_neighbors', 2, 8),
         'weights'           : hp.choice('weights', ['uniform', 'distance']),
-        'algorithm'         : hp.choice('algorithm', ['auto', 'ball_tree', 'kd_tree']),
-        'leaf_size'         : hp.randint('leaf_size', 2, 120),
+        'algorithm'         : hp.choice('algorithm', ['auto', 'ball_tree', 'kd_tree', 'brute']),
+        'leaf_size'         : hp.randint('leaf_size', 10, 40),
         'p'                 : hp.choice('p', [1, 2]),
-        # 'metric'            : hp.choice('metric', ['minkowski', 'manhattan'])
+        'n_jobs'            : hp.choice('n_jobs', [-1]),
     },
 
-    'Naive Bayes'     : {
-        'var_smoothing'     : hp.uniform('var_smoothing', 1e-11, 1e-9)
+    'Naive Bayes': {
+        'var_smoothing'     : hp.uniform('var_smoothing', 1e-11, 1e-8)
     },
 
-    'QDA'     : {
-        'reg_param'         : hp.uniform('reg_param', 0.0, 1.0),
-        'store_covariance'  : hp.choice('store_covariance', [True, False])
+    'QDA': {
+        'reg_param'         : hp.uniform('reg_param', 0.0, 0.4),
     },
 
-    'LDA'     : {
-        'solver'            : hp.choice('solver', ['svd', 'lsqr', 'eigen']),
-        'n_components'      : hp.choice('n_components', [0, 1, None]),
-        'store_covariance'  : hp.choice('store_covariance', [True, False]),
-        'tol'               : hp.uniform('tol', 0.0001, 0.01)
+    'LDA': {
+        'solver'   : hp.choice('solver', ['svd', 'lsqr', 'eigen']),
+        'shrinkage': hp.choice('shrinkage', [None, 'auto']),
+        'tol'      : hp.uniform('tol', 1.0e-5, 1.0e-1)
     },
 
     'Bagging Classifier': {
         'n_estimators'      : hp.randint('n_estimators', 5, 50),
         'max_samples'       : hp.uniform('max_samples', 0.1, 1.0),
-        'max_features'      : hp.uniform('max_features', 0.1, 1.0),
+        'max_features'      : hp.uniform('max_features', 0.5, 1.0),
         'bootstrap'         : hp.choice('bootstrap', [True, False]),
-        'bootstrap_features': hp.choice('bootstrap_features', [True, False])
+        'bootstrap_features': hp.choice('bootstrap_features', [True, False]),
+        'warm_start'        : hp.choice('warm_start', [False, True]),
+        'n_jobs'            : hp.choice('n_jobs', [-1]),
     },
 
     'Gradient Boosting': {
-        'learning_rate'            : hp.uniform('learning_rate', 0.0001, 0.01),
-        'n_estimators'             : hp.randint('n_estimators', 2, 100),
-        'subsample'                : hp.uniform('subsample', 0.1, 1.0),
+        'loss'                     : hp.choice('loss', ['log_loss', 'exponential']),
+        'learning_rate'            : hp.uniform('learning_rate', 0.01, 0.2),
+        'n_estimators'             : hp.randint('n_estimators', 10, 200),
+        'subsample'                : hp.uniform('subsample', 0.5, 1.0),
         'criterion'                : hp.choice('criterion', ['friedman_mse', 'squared_error']),
-        'min_samples_split'        : hp.uniform('min_samples_split', 0.1, 1.0),
-        'min_samples_leaf'         : hp.uniform('min_samples_leaf', 0.1, 1.0),
-        # 'min_weight_fraction_leaf' : hp.uniform('min_weight_fraction_leaf', 0.0, 0.5),  # not if min_samples_leaf
-        'max_depth'                : hp.randint('max_depth', 1, 200),
-        'max_features'             : hp.choice('max_features', ['sqrt', 'log2', None]),
+        'min_samples_split'        : hp.uniform('min_samples_split', 0.01, 0.25),
+        'min_samples_leaf'        : hp.randint('min_samples_leaf', 1, 2),
+        'max_depth'                : hp.randint('max_depth', 2, 15),
+        'max_features'             : hp.choice('max_features', [None, 'auto','sqrt', 'log2']),
     },
 }
 
 category_columns = ['Sex', 'ChestPainType', 'RestingECG', 'ExerciseAngina', 'ST_Slope']
-# need_one_hot = ['SVM', 'Logistic Regression', 'KNN', 'LDA', 'Neural Network', 'Gaussian Process', 'Decision Tree']
 
 def one_hot_encode(X_train, X_test):
 
@@ -241,7 +233,12 @@ def create_objective(name: str, df: pd.DataFrame):
             scaler.fit_transform(X_train)
             scaler.transform(X_test)
 
-            model.fit(X_train, y_train)
+            try:
+                model.fit(X_train, y_train)
+            except:
+                print('Failed a trial.')
+                print(search_space)
+                return {'loss': 1.0, 'status': STATUS_OK}
 
             y_pred = model.predict(X_test)
             score = accuracy_score(y_test, y_pred)
@@ -278,13 +275,15 @@ def optimize_hyperparams(name: str, df: pd.DataFrame, max_evals: int, scale_valu
     best_params = space_eval(search_spaces[name], optimized_params)
     losses = []
     params = []
+    statuses = []
 
     # Save losses and corresponding hyperparameter configurations.
     for trial in trials:
         losses.append(trial['result']['loss'])
         params.append(space_eval(search_spaces[name], unpack_vals(trial)))
+        statuses.append(trial['result']['status'])
 
-    return best_params, losses, params
+    return best_params, losses, params, statuses
 
 def compare_with_baseline(baseline: str, optimization_results: dict, train_df: pd.DataFrame, test_df: pd.DataFrame) -> dict:
 
@@ -354,7 +353,10 @@ def find_min_budget(baseline: str, train_df: pd.DataFrame, test_df: pd.DataFrame
     for name in classifiers:
         optimization_results[name]['min_budget'] = len(optimization_results[name]['losses'])
 
-        for step, params in enumerate(optimization_results[name]['params']):
+        for step, (params, status) in enumerate(zip(optimization_results[name]['params'], optimization_results[name]['statuses'])):
+            if status == 'ok':
+                continue
+
             classifier = classifiers[name]
 
             try:
