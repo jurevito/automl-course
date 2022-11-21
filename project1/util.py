@@ -354,7 +354,7 @@ def find_min_budget(baseline: str, train_df: pd.DataFrame, test_df: pd.DataFrame
         optimization_results[name]['min_budget'] = len(optimization_results[name]['losses'])
 
         for step, (params, status) in enumerate(zip(optimization_results[name]['params'], optimization_results[name]['statuses'])):
-            if status == 'ok':
+            if status != 'ok':
                 continue
 
             classifier = classifiers[name]
