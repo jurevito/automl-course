@@ -238,7 +238,7 @@ def create_objective(name: str, df: pd.DataFrame):
             except:
                 print('Failed a trial.')
                 print(search_space)
-                return {'loss': 1.0, 'status': STATUS_OK}
+                return {'loss': 1.0, 'status': STATUS_FAIL}
 
             y_pred = model.predict(X_test)
             score = accuracy_score(y_test, y_pred)
